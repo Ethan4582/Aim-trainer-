@@ -1,0 +1,186 @@
+import math
+import random
+import time
+import pygame
+import sys
+
+pygame.init()
+
+WIDTH, HEIGHT = 850, 600
+
+# 1. Game window
+WIN = pygame.display.set_mode((WIDTH, HEIGHT))
+# Initialize pygame window on the screen with the given height and width.
+
+pygame.display.set_caption("Aim Trainer")
+# Set the title of the window.
+
+# Custom event 
+target_increment = 400
+target_event = pygame.USEREVENT
+BG_COLOR = (0, 25, 40)  # RGB
+target_padding = 30
+lives = 3
+TOP_BAR_HEIGHT = 50
+LABEL_FONT = pygame.font.SysFont("comicsans", 27)
+
+class Target:
+    max_size = 40
+    growth_rate = 0.4
+    color = (255, 0, 0)  # Red
+    color2 = (255, 255, 255)  # White
+
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+        self.size = 0
+        self.grow = True
+
+    # Update the target size 
+    def update(self):
+        if self.size + self.growth_rate >= self.max_size:
+            self.grow = False
+
+        if self.grow:
+            self.size += self.growth_rate
+        else:
+            self.size -= self.growth_rate
+
+    # To draw object on window
+    def draw(self, win):
+        pygame.draw.circle(win, self.color, (self.x, self.y), int(self.size))
+        pygame.draw.circle(win, self.color2, (self.x, self.y), int(self.size * 0.8))
+        pygame.draw.circle(win, self.color, (self.x, self.y), int(self.size * 0.6))
+        pygame.draw.circle(win, self.color2, (self.x, self.y), int(self.size * 0.4))
+
+    def collide(self, x, y):
+        dis = math.sqrt((self.x - x) ** 2 + (self.y - y) ** 2)
+        return dis <= self.size
+
+def draw(win, targets):
+    win.fill(BG_COLOR)  # Fill the background color
+
+    for target in targets:
+        target.draw(win)
+
+ 
+
+# Analysis Bar 
+
+def format_time(sec):
+    milli = math.floor(int(sec * 1000) / 100)
+    seconds = int(round(sec % 60, 1))
+    minutes = int((sec // 60))
+
+    return f"{minutes:02d}:{seconds:02d}.{milli}" 
+
+# Draw the Top Bar
+def draw_top_bar(win, elapsed_time, target_pressed, misses):
+    pygame.draw.rect(win, "grey", (0, 0, WIDTH, TOP_BAR_HEIGHT))
+    time_label = LABEL_FONT.render(f"Time: {format_time(elapsed_time)}", 1, "black")
+     
+    speed = round(target_pressed / elapsed_time, 1 )
+    speed_label = LABEL_FONT.render(f"Speed: {speed} t/s", 1, "black")
+    hits_label = LABEL_FONT.render(f"Hits: {target_pressed}", 1, "black")
+    lives_label = LABEL_FONT.render(f"Lives: {lives - misses}", 1, "black")
+
+    win.blit(time_label, (2, 5))
+    win.blit(speed_label, (220, 5))
+    win.blit(hits_label, (450, 5))
+    win.blit(lives_label, (650, 5))
+
+#! End screen 
+def end_screen(win, elapsed_time, target_pressed, clicks):
+    win.fill(BG_COLOR)
+    time_label = LABEL_FONT.render(f"Time: {format_time(elapsed_time)}", 1, "white ")
+     
+    if clicks > 0:
+        speed = round(target_pressed / elapsed_time, 1 )
+        hits_per_click = round(target_pressed / clicks, 1)
+    else:
+        speed = 0
+        hits_per_click = 0
+
+    speed_label = LABEL_FONT.render(f"Speed: {speed} t/s", 1, "white")
+    hits_label = LABEL_FONT.render(f"Hits: {target_pressed}", 1, "white")
+    hits_per_click_label = LABEL_FONT.render(f"Hits per Click: {hits_per_click}", 1, "white")
+
+    win.blit(time_label, (get_middle(time_label), 100))
+    win.blit(speed_label, (get_middle(speed_label),  200))
+    win.blit(hits_label, (get_middle(hits_label), 300))
+    win.blit(hits_per_click_label, (get_middle(hits_per_click_label), 400))
+
+    pygame.display.update()
+    run = True
+    while run:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE):
+                sys.exit()  # Close the game
+
+def get_middle(surface):
+    return WIDTH / 2 - surface.get_width() / 2
+
+#! Infinite main loop to check different events.
+#! Game loop
+def main():
+    run = True
+    targets = []  # Store all different targets
+    clock = pygame.time.Clock()
+
+    target_pressed = 0
+    clicks = 0
+    misses = 0
+    start_time = time.time()
+
+    pygame.time.set_timer(target_event, target_increment)
+
+    while run:
+        #! Introduce the frame rate
+        clock.tick(60)
+        click = False
+        mouse_pos = pygame.mouse.get_pos()
+        targets_to_remove = []  # Create a list to store targets to be removed
+        elapsed_time = time.time() - start_time
+
+        #? Event handler
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                run = False
+                break
+
+            if event.type == target_event:
+                x = random.randint(target_padding, WIDTH - target_padding)
+                y = random.randint(target_padding + TOP_BAR_HEIGHT, HEIGHT - target_padding)
+                target = Target(x, y)
+                targets.append(target)
+
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                click = True
+                clicks += 1
+
+        for target in targets:
+            target.update()
+
+            if target.size <= 0:
+                targets_to_remove.append(target)  # Add the target to the removal list
+                misses += 1
+
+            if click and target.collide(*mouse_pos):
+                targets_to_remove.append(target)  # Add the target to the removal list
+                target_pressed += 1
+
+        #! Remove the targets from the main list
+        for target in targets_to_remove:
+            targets.remove(target)
+    
+        if misses >= lives:
+            end_screen(WIN, elapsed_time, target_pressed, clicks)  # End the game 
+
+        draw(WIN, targets)  
+        draw_top_bar(WIN, elapsed_time, target_pressed, misses)
+        pygame.display.update()
+
+    pygame.quit()
+
+if __name__ == "__main__":
+    main()
